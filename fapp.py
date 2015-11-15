@@ -1,4 +1,5 @@
 import os
+import os.path
 
 from flask import Flask, jsonify
 
@@ -12,6 +13,9 @@ def _get_templates():
     try:
         return os.listdir(TMPL_DIR)
     except OSError:
+        if not os.path.exists(TMPL_DIR):
+            os.mkdir(TMPL_DIR)
+        # it is empty at this point anyway
         return []
 
 
