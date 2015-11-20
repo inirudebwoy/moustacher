@@ -2,9 +2,8 @@ import os
 import os.path
 import shutil
 import subprocess
-import tempfile
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_file
 from jinja2 import Template
 
 app = Flask(__name__)
@@ -13,7 +12,6 @@ TMPL_DIR = 'templates'
 RASTER = 'output.js'
 TMPL_INDEX = 'index.html'
 CURRENT_PATH = os.path.abspath('.')
-IMG_TAG_SRC = 'data:image/png;base64,{image}'
 
 
 def _get_templates():
@@ -43,47 +41,55 @@ def template_list():
     return jsonify({'templates': _get_templates()})
 
 
-def _compose(img, template_name):
+def _make_jinja_template(path):
+    with open(path) as file_path:
+        return Template(file_path.read())
+
+
+def _create_JS_for_phantom(template_name, img_url):
     tmpl_path = os.path.join(CURRENT_PATH, TMPL_DIR, template_name)
-    # create temp files in template dir
-    html = tempfile.NamedTemporaryFile(dir=tmpl_path)
-    js = tempfile.NamedTemporaryFile(dir=tmpl_path)
 
     # copy contents of real files into temp files
-    html.file.write(open(os.path.join(tmpl_path, TMPL_INDEX)).read())
-    js.file.write(open(os.path.join(CURRENT_PATH, RASTER)).read())
+    js_path = os.path.join(CURRENT_PATH, 'output.js.copy')
+    shutil.copy(os.path.join(CURRENT_PATH, RASTER), js_path)
+    template_js = _make_jinja_template(js_path)
+
+    # update output.js.tmp, {{ template_path }}
+    with open(js_path, 'w') as js_file:
+        js_file.write(template_js.render(
+            template_path=os.path.join(tmpl_path, TMPL_INDEX)))
+
+    return js_path
+
+
+def _prepare_template(template_name, img_url):
+    tmpl_path = os.path.join(CURRENT_PATH, TMPL_DIR, template_name)
+
+    html_path = os.path.join(tmpl_path, 'index.html.copy')
+    shutil.copy(os.path.join(tmpl_path, TMPL_INDEX), html_path)
+
+    template_html = _make_jinja_template(html_path)
 
     # update index.html.tmp, {{ dick_pic }}
-    template_html = Template(html.read())
-    img_tag = IMG_TAG_SRC.format(image=img)
-    html.write(template_html.render(dick_pic=img_tag))
-
-    # update output.js.tmp, {{ template_name }}
-    template_js = Template(js.read())
-    js.write(template_js.render(template_name=os.path.join(tmpl_path,
-                                                           TMPL_INDEX)))
-
-    # return temp files
-    return html.name, js.name
+    with open(html_path, 'w') as html_file:
+        html_file.write(template_html.render(dick_pic=img_url))
 
 
-def _generate_img(template, img):
-    # make a template
-    tmp_html, tmp_js = _compose(img, template)
-    subprocess.Popen(['phantomjs', tmp_js],
-                     stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                     stderr=subprocess.STDOUT)
-    # close tmp files
-    tmp_html.close()
-    tmp_js.close()
+def _generate_img(template, img_url):
+    _prepare_template(template, img_url)
+    js = _create_JS_for_phantom(template, img_url)
+    subprocess.call(['phantomjs', js],
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT)
+    return open(os.path.join(CURRENT_PATH, 'output.png'))
 
 
 @app.route('/compose', methods=['POST'])
 def compose():
     """ Compose image with template """
-    img = request.form['img']
+    img_url = request.form['img']
     template = request.form['template']
-    return jsonify({'image': _generate_img(template, img)})
+    return send_file(_generate_img(template, img_url))
 
 
 if __name__ == '__main__':
