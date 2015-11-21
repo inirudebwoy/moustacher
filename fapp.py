@@ -2,6 +2,7 @@ import os
 import os.path
 import shutil
 import subprocess
+import argparse
 
 from flask import Flask, jsonify, request, send_file
 from jinja2 import Template
@@ -93,4 +94,10 @@ def compose():
 
 
 if __name__ == '__main__':
-    app.run()
+    p = argparse.ArgumentParser()
+    p.add_argument("--debug", action="store_true", default=False)
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", default=5000, type=int)
+    args = p.parse_args()
+
+    app.run(host=args.host, port=args.port, debug=args.debug)
