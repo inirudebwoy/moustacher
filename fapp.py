@@ -82,7 +82,7 @@ def _generate_img(template, img_url):
     subprocess.call(['phantomjs', js],
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT)
-    return open(os.path.join(CURRENT_PATH, 'output.png'))
+    return open(os.path.join(CURRENT_PATH, 'output.jpg'))
 
 
 @app.route('/compose', methods=['POST'])
